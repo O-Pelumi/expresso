@@ -9,6 +9,66 @@
 #include "Expresso.hpp"
 #include "cassert"
 
+
+struct Expresso::ExpressoNode {
+    Token token;
+    ExpressoNode* left;
+    ExpressoNode* right;
+    
+    explicit ExpressoNode(Token tok) : left(nullptr), right(nullptr) {
+        std::swap(tok, token);
+    }
+    
+    void setLAndR(ExpressoNode *lhs, ExpressoNode *rhs) {
+        left = lhs;
+        right = rhs;
+    }
+    
+    double eveluate() {
+        if (token.isOperand())
+            return token.getOperand();
+        
+        double val = std::numeric_limits<double>::infinity();
+        if (!left)
+            return val;
+        
+        switch (token.getOperation()) {
+            case OPP::ADD:
+                val = left->eveluate() + right->eveluate();
+                break;
+            case OPP::SUB:
+                val = left->eveluate() - right->eveluate();
+                break;
+            case OPP::MUL:
+                val = left->eveluate() * right->eveluate();
+                break;
+            case OPP::DIV:
+                val = left->eveluate() / right->eveluate();
+                break;
+            case OPP::POW:
+                val = pow(left->eveluate(), right->eveluate());
+                break;
+            case OPP::NOP:
+            case OPP::LB:
+            case OPP::RB:
+            case OPP::SIN:
+                val = std::sin(left->eveluate() * RAD2DEG);
+                break;
+            case OPP::COS:
+                val = std::cos(left->eveluate() * RAD2DEG);
+                break;
+            case OPP::TAN:
+                val = std::tan(left->eveluate() * RAD2DEG);
+                break;
+        }
+        
+        return val;
+    }
+};
+
+
+
+
 Expresso::Expresso() : nodeStack(0)
 {
     
@@ -18,28 +78,30 @@ int Expresso::precedenceLevel(OPP opp)
 {
     int level;
     switch (opp) {
-        case OPP::RB:
+        case OPP::NOP:
             level = 0;
+            break;
+        case OPP::RB:
+            level = 1;
             break;
         case OPP::ADD:
         case OPP::SUB:
-            level = 1;
+            level = 2;
             break;
         case OPP::MUL:
         case OPP::DIV:
-            level = 2;
+            level = 3;
             break;
         case OPP::POW:
-            level = 3;
+            level = 4;
             break;
         case OPP::SIN:
         case OPP::COS:
         case OPP::TAN:
-            level = 4;
-            break;
-        case OPP::NOP:
-        case OPP::LB:
             level = 5;
+            break;
+        case OPP::LB:
+            level = 6;
             break;
     }
     return level;
@@ -104,13 +166,23 @@ void Expresso::updateTree()
     ExpressoNode *node = operatorStack.back();
     operatorStack.pop_back();
     
-    // Unary Corner Case for minus and addition
-    if (nodeStack.size() == 1 && node->token.isUnary()) {
-        ExpressoNode *lhs = nodeStack.back();
-        nodeStack.pop_back();
-        node->left = lhs;
-        nodeStack.push_back(node);
-        return;
+    // Unary Corner Case
+    if (node->token.isUnary()) {
+        // Sometimes-unary operations like + and - are only unary in two cases
+        // 1. This is the  easy one when the very first token is  + or -, e.g. -2 * 5
+        // 2. The second case is a bracket preceeding token, e.g. 2 + (-2)
+        // 3. Or even more interesting is the case of -(-(-2))
+        // sin(90)*2, -90*2^2+1
+        auto opp =  node->token.getOperation();
+        if (opp != OPP::ADD && opp != OPP::SUB) {
+            ExpressoNode *lhs = nodeStack.back();
+            nodeStack.pop_back();
+            node->left = lhs;
+            nodeStack.push_back(node);
+            printf("Handled Unary");
+            return;
+        }
+        
     }
     
     assert(nodeStack.size() > 1);
