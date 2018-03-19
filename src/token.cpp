@@ -6,7 +6,7 @@
 //  Copyright © 2017 Oluwapelumi. All rights reserved.
 //
 
-#include "Token.hpp"
+#include "token.h"
 
 Token::Token() : operand(0.0), operation(OPP::NOP)
 {
@@ -18,13 +18,6 @@ Token::Token(double operand) : operand(operand), operation(OPP::NOP)
 
 Token::Token(OPP operation) : operand(0.0), operation(operation)
 {
-}
-
-bool Token::isUnary()
-{
-    if (operation == OPP::ADD || operation == OPP::SUB || operation == OPP::SIN || operation == OPP::COS || operation == OPP::TAN)
-        return true;
-    return false;
 }
 
 bool Token::isOperand()

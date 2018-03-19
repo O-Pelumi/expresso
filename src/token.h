@@ -1,13 +1,5 @@
-//
-//  token.hpp
-//  regex
-//
-//  Created by Oluwapelumi on 5/4/17.
-//  Copyright © 2017 Oluwapelumi. All rights reserved.
-//
-
-#ifndef token_hpp
-#define token_hpp
+#ifndef TOKEN_H
+#define TOKEN_H
 
 #include <string>
 #include <tuple>
@@ -36,7 +28,6 @@ public:
     Token();
     explicit Token (double operand);
     explicit Token (OPP operation);
-    bool isUnary();
     bool isOperand();
     
     double getOperand();

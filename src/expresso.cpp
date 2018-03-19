@@ -1,21 +1,22 @@
-//
-//  Expresso.cpp
-//  regex
-//
-//  Created by Oluwapelumi on 3/1/18.
-//  Copyright © 2018 Oluwapelumi. All rights reserved.
-//
 
-#include "Expresso.hpp"
-#include "cassert"
+#include <cassert>
+#include "tokenizer.h"
+
+#include "expresso.h"
+
 
 
 struct Expresso::ExpressoNode {
     Token token;
     ExpressoNode* left;
     ExpressoNode* right;
+    bool isUnary;
     
     explicit ExpressoNode(Token tok) : left(nullptr), right(nullptr) {
+        std::swap(tok, token);
+    }
+    
+    ExpressoNode(Token tok, bool ifUnary) : left(nullptr), right(nullptr), isUnary(ifUnary) {
         std::swap(tok, token);
     }
     
@@ -69,9 +70,35 @@ struct Expresso::ExpressoNode {
 
 
 
-Expresso::Expresso() : nodeStack(0)
+Expresso::Expresso(std::string expression) : nodeStack(0)
 {
-    
+    Tokenizer {expression, *this};
+}
+
+Expresso::~Expresso()
+{
+    for (auto node : operatorStack)
+        delete node;
+    for (auto node : nodeStack) {
+        // recursively delete objects
+        deleteNode(node);
+    }
+}
+
+void Expresso::deleteNode(ExpressoNode* node)
+{
+    if (node->left)
+        deleteNode(node->left);
+    if (node->right)
+        deleteNode(node->right);
+    delete node;
+}
+
+bool Expresso::isUnary(OPP operation)
+{
+    if (operation == OPP::SIN || operation == OPP::COS || operation == OPP::TAN)
+        return true;
+    return false;
 }
 
 int Expresso::precedenceLevel(OPP opp)
@@ -123,18 +150,24 @@ int Expresso::precedence(OPP top, OPP newTop)
     } else {
         precedence = precedenceLevel(newTop) - precedenceLevel(top);
     }
-    if (precedence < 0) {
-        std::cout << newTop << " is of lesser precedence to " << top << std::endl;
-    } else if (precedence > 0) {
-        std::cout << newTop << " is of higher precedence to " << top << std::endl;
-    } else {
-        std::cout << newTop << " is of equal precedence to " << top << std::endl;
-    }
+    // if (precedence < 0) {
+    //     std::cout << newTop << " is of lesser precedence to " << top << std::endl;
+    // } else if (precedence > 0) {
+    //     std::cout << newTop << " is of higher precedence to " << top << std::endl;
+    // } else {
+    //     std::cout << newTop << " is of equal precedence to " << top << std::endl;
+    // }
     return precedence;
 }
 
 void Expresso::visitToken(Token token)
 {
+    // Sometimes-unary operations like + and - are only unary in two cases
+    // 1. This first is when the very first token is  + or -, e.g. -2 * 5
+    // 2. The second case is a bracket preceeding token, e.g. 2 + (-2), -(-(-2))
+    // sin(90)*2, -90*2^2+1
+    bool isUnary = false;
+    
     if (token.isOperand()) {
         // keep temporarily in vector
         nodeStack.push_back(new ExpressoNode(std::move(token)));
@@ -150,54 +183,64 @@ void Expresso::visitToken(Token token)
     if (newOperator == OPP::RB) {
         // pop LB after evaluation if token.getOperation() is RB
         OPP lb = operatorStack.back()->token.getOperation();
-        std::cout << " assert(operatorStack.back() == (-" << lb  << "-) )" << std::endl;
+        // std::cout << " assert(operatorStack.back() == (-" << lb  << "-) )" << std::endl;
         assert(lb == OPP::LB);
         operatorStack.pop_back();
         return;
+    } else if (Expresso::isUnary(newOperator)) {
+        isUnary = true;
+    } else if (newOperator == OPP::ADD || newOperator == OPP::SUB) {
+        // It's important to note last token is not necessarily the back operatorStack
+        // So how do I tell the difference between (2 + 3) and (+3)
+        if (!nodeStack.size()) {
+            isUnary = true;
+        }
     }
     
-    operatorStack.push_back(new ExpressoNode(std::move(token)));
+    operatorStack.push_back(new ExpressoNode(std::move(token), isUnary));
 }
 
 void Expresso::updateTree()
 {
-    std::cout << __FUNCTION__ << std::endl;
+    ExpressoNode *rhs = nullptr;
+    ExpressoNode *lhs = nullptr;
+    
     // Create tree here
     ExpressoNode *node = operatorStack.back();
     operatorStack.pop_back();
     
     // Unary Corner Case
-    if (node->token.isUnary()) {
-        // Sometimes-unary operations like + and - are only unary in two cases
-        // 1. This is the  easy one when the very first token is  + or -, e.g. -2 * 5
-        // 2. The second case is a bracket preceeding token, e.g. 2 + (-2)
-        // 3. Or even more interesting is the case of -(-(-2))
-        // sin(90)*2, -90*2^2+1
+    if (node->isUnary) {
         auto opp =  node->token.getOperation();
-        if (opp != OPP::ADD && opp != OPP::SUB) {
+        if (opp == OPP::ADD || opp == OPP::SUB) {
+            // it becomes 0 - value or 0 + value
+            lhs = new ExpressoNode(Token(0.0));
+        } else {
             ExpressoNode *lhs = nodeStack.back();
             nodeStack.pop_back();
             node->left = lhs;
             nodeStack.push_back(node);
-            printf("Handled Unary");
             return;
         }
-        
     }
+    // Binary Operations down here
+    // -x and +x are handled as binary (0 - x) and (0 + x)
+    if (!node->isUnary)
+        assert(nodeStack.size() > 1);
     
-    assert(nodeStack.size() > 1);
-    
-    ExpressoNode *rhs = nodeStack.back();
+    rhs = nodeStack.back();
     nodeStack.pop_back();
     
-    ExpressoNode *lhs = nodeStack.back();
-    nodeStack.pop_back();
+    if (!lhs) {
+        lhs = nodeStack.back();
+        nodeStack.pop_back();
+    }
     
     node->setLAndR(lhs, rhs);
     nodeStack.push_back(node);
 }
 
-void Expresso::evaluate()
+double Expresso::evaluate()
 {
     // Lazy tree update
     while (operatorStack.size()) {
@@ -205,5 +248,5 @@ void Expresso::evaluate()
     }
     
     assert(nodeStack.size() == 1);  // That's the root
-    std::cout << "Expression result = " << nodeStack.back()->eveluate() << std::endl;
+    return nodeStack.back()->eveluate();
 }
